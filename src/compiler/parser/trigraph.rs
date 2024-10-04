@@ -37,7 +37,6 @@ pub fn trigraph_convert<'a>(input: &'a str) -> Vec<&'a str> {
             continue;
         }
 
-
         let replacement = match window[2] {
             b'=' => "#",
             b'(' => "[",
@@ -48,7 +47,6 @@ pub fn trigraph_convert<'a>(input: &'a str) -> Vec<&'a str> {
             b'!' => "|",
             b'>' => "}",
             b'-' => "~",
-            b'?' => "?",
             _ => {
                 i += 1;
                 continue;
