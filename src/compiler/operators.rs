@@ -5,69 +5,60 @@
 use crate::genStrType;
 
 genStrType!(Operators, OPERATORS,
-    Period, ".",
-    Arrow, "->",
-    Increment, "++",
-    Decrement, "--",
+    Period => ".";
+    Arrow => "->";
+    Increment => "++";
+    Decrement => "--";
 
-    AddEq, "+=",
-    Add, "+",
+    AddEq => "+=";
+    Add => "+";
 
-    SubEq, "-=",
-    Sub, "-",
+    SubEq => "-=";
+    Sub => "-";
 
-    AndEq, "&=",
-    LogicalAnd, "&&",
-    Ampersand, "&", // Might be ref OR bitwise and
+    AndEq => "&=";
+    LogicalAnd => "&&";
+    Ampersand => "&"; // Might be ref OR bitwise and
 
-    OrEq, "|=",
-    LogicalOr, "||",
-    BitwiseOr, "|",
+    OrEq => "|=";
+    LogicalOr => "||";
+    BitwiseOr => "|";
 
-    Asterisk, "*", // Might be multiplication OR deref
-    MultEq, "*=",
-    
-    BitwiseComplement, "~",
-    LogicalNegation, "!",
-    NotEq, "!=",
+    Asterisk => "*"; // Might be multiplication OR deref
+    MultEq => "*=";
 
-    BitwiseXorEq, "^=",
-    BitwiseXor, "^",
-    
-    SizeOf, "sizeof",
+    BitwiseComplement => "~";
+    LogicalNegation => "!";
+    NotEq => "!=";
 
-    DivideEq, "/=",
-    Divide, "/",
-    
-    ModEq, "%=",
-    Mod, "%",
+    BitwiseXorEq => "^=";
+    BitwiseXor => "^";
 
-    LeftShiftEq, "<<=",
-    RightShiftEq, ">>=",
+    SizeOf => "sizeof";
 
-    LeftShift, "<<",
-    RightShift, ">>",
+    DivideEq => "/=";
+    Divide => "/";
 
-    LesserThanOrEq, "<=",
-    LesserThan, "<",
-    GreaterThanOrEq, ">=",
-    GreaterThan, ">",
+    ModEq => "%=";
+    Mod => "%";
 
+    LeftShiftEq => "<<=";
+    RightShiftEq => ">>=";
 
-    QuestionMark, "?",
-    Colon, ":",
-    Comma, ",",
-    LogicalEquals, "==",
-    Assignment, "=",
+    LeftShift => "<<";
+    RightShift => ">>";
 
-    DoublePound, "##",
-    Pound, "#"
-  
+    LesserThanOrEq => "<=";
+    LesserThan => "<";
+    GreaterThanOrEq => ">=";
+    GreaterThan => ">";
 
+    QuestionMark => "?";
+    Colon => ":";
+    Comma => ",";
+    LogicalEquals => "==";
+    Assignment => "=";
+
+    DoublePound => "##", "%:%:";
+    Pound => "#", "%:";
 );
-
-// ++  --  &  *  +  -  ~  !  sizeof
-// /  %  <<  >>  <  >  <=  >=  ==  !=  ^  |  &&  ||
-// ?  :
-// =  *=  /=  %=  +=  -=  <<=  >>=  &=  ^=  |=
-// ,  #  ##

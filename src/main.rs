@@ -3,6 +3,8 @@
 mod compiler;
 use std::collections::HashMap;
 
+use compiler::parser::trigraph::trigraph_convert;
+
 const SAMPLE : &str = "
 #define CONST_INT 5
 #define ADD(XXX, YYY) ((XXX) + (YYY))
@@ -31,8 +33,17 @@ int main()<%
 ";
 fn main() {
     
-    
-    // println!("{:?}", ts);
+    let t = trigraph_convert("//          ??=      #
+    //          ??(      [
+    //          ??/      \\
+    //          ??)      ]
+    //          ??'      ^
+    //          ??<      {
+    //          ??!      |
+    //          ??>      }
+    //          ??-      ~");
+    println!("{}", t.concat());
+    println!("{:?}", t);
     // println!("{:?}", test_tokens_against(FUNCTION_DECLARATION, &ts));
     
 }

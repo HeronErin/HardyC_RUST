@@ -7,35 +7,46 @@ pub mod error;
 
 #[macro_export]
 macro_rules! genStrType {
-    ($name : ident, $arr_name : ident, $($element:ident, $text: literal), *) => {
-        const $arr_name : &[&'static str] = &[$($text, )*];
+    ($name:ident, $arr_name:ident, $($element:ident => $($text:literal),+);* $(;)?) => {
+        const $arr_name: &[&'static str] = &[
+            $(
+                $(
+                    $text,
+                )+
+            )*
+        ];
 
         #[derive(Debug, Clone, PartialEq)]
-        pub enum $name{
+        pub enum $name {
+            INVALID,
             $(
                 $element,
             )*
         }
-        impl $name{
-            pub fn try_from_string(x : &str) ->Option<Self>{
-                if x.len() <= 1 { return None }
+
+        impl $name {
+            pub fn try_from_string(x: &str) -> Option<Self> {
+                if x.len() <= 1 { return None; }
 
                 $(
-                    // This _should_ be evaluated at compile time
-                    if Self::$element != Self::DUMMY{
-                        if x.starts_with($text){
-                            return Some(Self::$element)
+                    $(
+                        if x.starts_with($text) {
+                            return Some(Self::$element);
                         }
-                    }
+                    )+
                 )*
+
                 None
             }
-            pub fn to_string(&self) -> &'static str{
-                match self{
+
+            pub fn to_string(&self) -> &'static str {
+                match self {
                     $(
-                        Self::$element => $text,
+                        $(
+                            Self::$element => $text,
+                        )+
                     )*
-                    _ => unreachable!()
+                    _ => unreachable!(),
                 }
             }
         }
