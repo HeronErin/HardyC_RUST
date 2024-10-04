@@ -3,41 +3,35 @@
 mod compiler;
 use std::collections::HashMap;
 
-use compiler::parser::line_parser::build_recursive;
-
-
 const SAMPLE : &str = "
-struct Foo{
-    char x;
-    int y;
-    short z;
-    union{
-        char* x2;
-        int* y2;
-        char nil;
-    }
-};
+#define CONST_INT 5
+#define ADD(XXX, YYY) ((XXX) + (YYY))
+#define SUB(XXX, YYY) ((XXX) - (YYY))
+#define ADD_SUB(XXXX, YYYY)  ADD(XXXX) - SUB(YYYY)
 
-typedef Dtyp char;
 
-static unsigned char** doShit(void** input, struct Foo bar, Dtyp d){
-    return (unsigned char**)0;
+#define CONCAT(a, b) a##b
+
+
+#if CONST_INT == 1
+int foo(){
+#else
+void bar(){
+#endif
+    int xy = 100;
+    int x = ADD_SUB(1, -1) + CONST_INT - CONCAT(x, y);
+
 }
-int main(){
-    char x = ***&*&doShit(((void**) 0, struct Foo{
-        x : 1,
-        y : 2,
-        z : 4,
-        nil : 0
-    }, 4) * 2);
 
-    return x;
-}
+int main()<%
+    printf(\"foo\");
+%>
+
 
 ";
 fn main() {
     
-    println!("{:?}", build_recursive(SAMPLE))
+    
     // println!("{:?}", ts);
     // println!("{:?}", test_tokens_against(FUNCTION_DECLARATION, &ts));
     
