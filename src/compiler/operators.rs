@@ -4,6 +4,14 @@
 
 use crate::genStrType;
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum Bracket{
+    Parenthesis, // ()
+    CurlyBracket, // {}  ALSO digraphs: <% %>
+    SquareBracket // [] ALSO digraphs: <: :>
+}
+
+
 genStrType!(Operators, OPERATORS,
     Period => ".";
     Arrow => "->";

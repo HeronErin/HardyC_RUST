@@ -1,4 +1,4 @@
-use crate::compiler::keywords::Keyword;
+use crate::compiler::{keywords::Keyword, operators::Bracket};
 
 #[derive(Debug, Clone)]
 pub enum TokenData<'a>{
@@ -10,13 +10,16 @@ pub enum TokenData<'a>{
 
 
     
-    OpenBracket(char),
-    CloseBracket(char),
+    OpenBracket(Bracket),
+    CloseBracket(Bracket),
 
     Semicolon,
     Colon
 
 }
+
+
+
 
 
 #[derive(Debug, Clone)]

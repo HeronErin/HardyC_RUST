@@ -19,18 +19,17 @@ use std::{slice::Windows, str::Utf8Chunk};
 use num_traits::ops::bytes;
 
 // Fast AF trigraph converter
-pub fn trigraph_convert<'a>(input: &'a str) -> Vec<&'a str> {
-    let bytes = input.as_bytes();
-
-    // Theoretically the max size for vec. 
-    let mut res = Vec::with_capacity(bytes.len() / 3);
+// This requires little 
+pub fn trigraph_convert<'a>(input: &'a [u8]) -> Vec<(usize, &'a [u8])> {
+    // Most people don't use trigraphs, so reserving is not necessary
+    let mut res = Vec::new();
 
     let mut i = 0;
     let mut oldest_non_trigraph = 0;
-    let len = bytes.len();
+    let len = input.len();
 
-    while i <= len - 3 {
-        let window = &bytes[i..i + 3];
+    while i+3 <= len {
+        let window = &input[i..i + 3];
 
         if window[0] != b'?' || window[1] != b'?' {
             i += 1;
@@ -38,15 +37,15 @@ pub fn trigraph_convert<'a>(input: &'a str) -> Vec<&'a str> {
         }
 
         let replacement = match window[2] {
-            b'=' => "#",
-            b'(' => "[",
-            b'/' => "\\",
-            b')' => "]",
-            b'\'' => "^",
-            b'<' => "{",
-            b'!' => "|",
-            b'>' => "}",
-            b'-' => "~",
+            b'=' => b"#",
+            b'(' => b"[",
+            b'/' => b"\\",
+            b')' => b"]",
+            b'\'' =>b"^",
+            b'<' => b"{",
+            b'!' => b"|",
+            b'>' => b"}",
+            b'-' => b"~",
             _ => {
                 i += 1;
                 continue;
@@ -55,11 +54,11 @@ pub fn trigraph_convert<'a>(input: &'a str) -> Vec<&'a str> {
 
         // Push non-trigraph part
         if oldest_non_trigraph != i {
-            res.push(unsafe { std::str::from_utf8_unchecked(&bytes[oldest_non_trigraph..i]) });
+            res.push((oldest_non_trigraph, (&input[oldest_non_trigraph..i])));
         }
 
         // Push trigraph replacement
-        res.push(replacement);
+        res.push((i, replacement));
 
         // Skip the 3 characters of the trigraph
         i += 3;
@@ -68,7 +67,7 @@ pub fn trigraph_convert<'a>(input: &'a str) -> Vec<&'a str> {
 
     // Add any remaining non-trigraph text
     if oldest_non_trigraph < len {
-        res.push(unsafe { std::str::from_utf8_unchecked(&bytes[oldest_non_trigraph..len]) });
+        res.push((oldest_non_trigraph, &input[oldest_non_trigraph..len]));
     }
 
     res
@@ -79,7 +78,7 @@ pub fn trigraph_convert<'a>(input: &'a str) -> Vec<&'a str> {
 mod tests{
     use super::*;
     fn simple(){
-        assert_eq!(trigraph_convert("//          ??=      #
+        assert_eq!(trigraph_convert(b"//          ??=      #
     //          ??(      [
     //          ??/      \\
     //          ??)      ]
@@ -87,7 +86,7 @@ mod tests{
     //          ??<      {
     //          ??!      |
     //          ??>      }
-    //          ??-      ~").concat(), "//          #      #
+    //          ??-      ~").iter().map(|t| t.1).collect::<Vec<_>>().concat(), b"//          #      #
     //          [      [
     //          \\      \\
     //          ]      ]

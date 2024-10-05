@@ -5,6 +5,7 @@ pub mod operators;
 
 pub mod error;
 
+
 #[macro_export]
 macro_rules! genStrType {
     ($name:ident, $arr_name:ident, $($element:ident => $($text:literal),+);* $(;)?) => {
