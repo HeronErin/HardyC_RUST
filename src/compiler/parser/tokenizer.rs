@@ -1,7 +1,7 @@
 use crate::compiler::{keywords::Keyword, operators::Bracket};
 
 #[derive(Debug, Clone)]
-pub enum TokenData<'a>{
+pub enum Token<'a>{
     Keyword(Keyword),
     TextCluster(&'a str),
 
@@ -15,16 +15,4 @@ pub enum TokenData<'a>{
 
     Semicolon,
     Colon
-
-}
-
-
-
-
-
-#[derive(Debug, Clone)]
-pub struct Token<'a> {
-    pub index: usize,
-    pub length: usize,
-    pub data: TokenData<'a>,
 }

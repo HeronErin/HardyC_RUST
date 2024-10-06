@@ -44,7 +44,8 @@ fn main() {
     dbg!(p3);
     dbg!(p4);
 
-
+    let x : f64 = "+2e2".parse().unwrap();
+    dbg!(x);
     // println!("{:?}", p2.iter().map(|x| String::from_utf8_lossy(x.1)).collect::<Vec<_>>().concat());
     // println!("{:?}", t);
     // println!("{:?}", test_tokens_against(FUNCTION_DECLARATION, &ts));
