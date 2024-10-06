@@ -2,204 +2,147 @@
 // For more info; 2.1.1.2 Translation phases
 
 // Phases:
-// 1. Trigraphs
+// 1. Trigraphs (see: trigraph.rs)
 // 2. Non-logical newline striping (I.e "\\\n" -> "")
+// 3. Comments
 
 
 
 // Turns "\\\n" -> ""
-pub fn non_logical_newline_striping<'a>(input: Vec<(usize, &'a [u8])>) -> Vec<(usize, &'a [u8])>{
-    let mut result = Vec::with_capacity(input.capacity());
+pub fn non_logical_newline_striping(input: &str) -> String{
+    let mut res = String::with_capacity(input.len());
+
+
+    let mut utf8chars = input.chars();
+
+    let next_two = (utf8chars.next(), utf8chars.next());
     
-    let mut itr = input.iter();
-    let (mut last_file_index, mut bytes) = match itr.next() {
-        Some(x) => x,
-        None => return result
-    };
-
-    let mut is_after_backslash = false;
-    let mut i = 0;
-    loop {
-        if i >= bytes.len(){
-            result.push((last_file_index, bytes));
-            i = 0;
-
-            (last_file_index, bytes) = match itr.next() {
-                Some(x) => *x,
-                None => break
-            };
-        }
-        let char = bytes[i];
-        let is_backslash = char == b'\\';
-        let is_nl = char == b'\n';
-
-        if is_backslash && is_after_backslash{ is_after_backslash = false;}
-        else if is_backslash{is_after_backslash = true;}
-        else if is_nl && is_after_backslash{
-            if i == 0{
-                // Safety: We dispose of the last value quickly so being mutable is not a problem
-                // Safety: is_after_backslash can only be set if something precedes is
-                let last = unsafe{ result.last_mut().unwrap_unchecked() };
-                last.1 = &last.1[..last.1.len()-1];
-                bytes = &bytes[1..];
-                last_file_index += 1;
-            }else{
-               let before = &bytes[..i - 1];
-               bytes = &bytes[i+1..];
-               
-               result.push((last_file_index, before));
-
-               last_file_index += i+1;
-
-               is_after_backslash = false;
-            }
-            i = 0;
-            continue;
-        } else if is_after_backslash{
-            is_after_backslash = false;
-        }
-        
-        i += 1;
+    
+    if next_two.1.is_none() {
+        if let Some(c) = next_two.0 {res.push(c);}
+        return res;
     }
-
-
-
-    return result;
-}
-
-// Turns "/*   */" -> " "
-pub fn star_comment_striper<'a>(input: Vec<(usize, &'a [u8])>) -> Vec<(usize, &'a [u8])>{
-    let mut result = Vec::with_capacity(input.capacity());
-    let mut itr = input.iter();
-    let (mut last_file_index, mut bytes) = match itr.next() {
-        Some(x) => x,
-        None => return result
-    };
-
-    let mut is_within_comment = false;
-    let mut i = 0;
+    let mut next_two = (next_two.0.unwrap(), next_two.1.unwrap());
     loop{
-        if i+1 >= bytes.len(){
-            if !is_within_comment{
-                result.push((last_file_index, bytes));
+        if ('\\', '\n') == next_two{
+            let next_two_opt = (utf8chars.next(), utf8chars.next());
+            if next_two_opt.1.is_none() {
+                if let Some(c) = next_two_opt.0 {res.push(c);}
+                return res;
             }
-            i = 0;
-
-            (last_file_index, bytes) = match itr.next() {
-                Some(x) => *x,
-                None => break
-            };
+            next_two = (next_two_opt.0.unwrap(), next_two_opt.1.unwrap());
+            continue;
         }
-        if (!is_within_comment && bytes[i] == b'/' && bytes[i+1] == b'*'){
-            is_within_comment = true;
-            
+        res.push(next_two.0);
+        next_two.0 = next_two.1;
+        next_two.1 = match utf8chars.next() {
+            Some(c) => c,
+            None => {res.push(next_two.0); break;},
         }
         
-
-
-        i+=1;
     }
 
 
-    return result;
-}
-
-// Not that fast, but good for tests
-fn back_to_string(pieces :  Vec<(usize, &[u8])>) -> String{
-    pieces.iter().map(|x| String::from_utf8_lossy(x.1)).collect::<Vec<_>>().concat()
+    res
 }
 
 
+pub fn strip_star_style_comments(input : &str) -> String{
+    let mut res = String::with_capacity(input.len());
 
 
-
-
-
-
-
-
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_no_escape() {
-        let input = vec![(0, b"Hello\nWorld\n".as_ref())];
-        let expected = "Hello\nWorld\n";
-        let result = back_to_string(non_logical_newline_striping(input));
-        assert_eq!(expected, result);
+    let mut utf8chars = input.chars();
+    let next_two = (utf8chars.next(), utf8chars.next());
+    
+    if next_two.1.is_none() {
+        if let Some(c) = next_two.0 {res.push(c);}
+        return res;
     }
 
-    #[test]
-    fn test_simple_escape() {
-        let input = vec![(0, b"Hello\\\nWorld\n".as_ref())];
-        let expected = "HelloWorld\n";
-        let result = back_to_string(non_logical_newline_striping(input));
-        assert_eq!(expected, result);
+    let mut is_in_comment = false;
+    let mut next_two = (next_two.0.unwrap(), next_two.1.unwrap());
+
+   
+    macro_rules! move_forward_from_match {
+        () => {
+            let next_two_opt = (utf8chars.next(), utf8chars.next());
+            if next_two_opt.1.is_none() {
+                if let Some(c) = next_two_opt.0 {if !is_in_comment { res.push(c); }}
+                return res;
+            }
+            next_two = (next_two_opt.0.unwrap(), next_two_opt.1.unwrap());
+            continue;
+
+        };
+    }
+    loop{
+       
+        if !is_in_comment && ('/', '*') == next_two{
+            is_in_comment = true;
+            res.push(' '); // "Each comment is replaced by one space character" ok...
+            move_forward_from_match!();
+        }
+        // "21. Thus comments do not nest." saves me the work
+        else if is_in_comment && ('*', '/') == next_two{
+            is_in_comment = false;
+            move_forward_from_match!();
+        }
+
+
+        if !is_in_comment{ res.push(next_two.0); }
+        next_two.0 = next_two.1;
+        next_two.1 = match utf8chars.next() {
+            Some(c) => c,
+            None => {if !is_in_comment {res.push(next_two.0);} break;},
+        }
+        
     }
 
-    #[test]
-    fn test_multiple_escapes() {
-        let input = vec![(0, b"Line1\\\nLine2\\\nLine3\n".as_ref())];
-        let expected = "Line1Line2Line3\n";
-        let result = back_to_string(non_logical_newline_striping(input));
-        assert_eq!(expected, result);
+
+    res
+}
+
+
+
+// Not technically in the ansi.c spec, but i want it!
+pub fn strip_single_line_style_comments(input : &str) -> String{
+    let mut res = String::with_capacity(input.len());
+
+
+    let mut utf8chars = input.chars();
+    let next_two = (utf8chars.next(), utf8chars.next());
+    
+    if next_two.1.is_none() {
+        if let Some(c) = next_two.0 {res.push(c);}
+        return res;
     }
 
-    #[test]
-    fn test_leading_escape() {
-        let input = vec![(0, b"\\\nLine1\n".as_ref())];
-        let expected = "Line1\n";
-        let result = back_to_string(non_logical_newline_striping(input));
-        assert_eq!(expected, result);
+    let mut is_in_comment = false;
+    let mut next_two = (next_two.0.unwrap(), next_two.1.unwrap());
+   
+    loop{
+        if !is_in_comment && next_two == ('/', '/'){
+            is_in_comment = true;
+            // Don't think a space is needed as a newline is inserted soon
+            // (assuming this comment is not at the end of a file)
+            let next_two_opt = (utf8chars.next(), utf8chars.next());
+            if next_two_opt.1.is_none() { return res; }
+            next_two = (next_two_opt.0.unwrap(), next_two_opt.1.unwrap());
+            continue;
+        }   
+        if next_two.0 == '\n'{
+            is_in_comment = false;
+        }
+
+        if !is_in_comment{ res.push(next_two.0); }
+        next_two.0 = next_two.1;
+        next_two.1 = match utf8chars.next() {
+            Some(c) => c,
+            None => {if !is_in_comment {res.push(next_two.0);} break;},
+        }
+        
     }
 
-    #[test]
-    fn test_trailing_escape() {
-        let input = vec![(0, b"Line1\\\n".as_ref())];
-        let expected = "Line1";
-        let result = back_to_string(non_logical_newline_striping(input));
-        assert_eq!(expected, result);
-    }
 
-    #[test]
-    fn test_consecutive_escapes() {
-        let input = vec![(0, b"Line1\\\\\nLine2\n".as_ref())];
-        let expected = "Line1\\\\\nLine2\n";
-        let result = back_to_string(non_logical_newline_striping(input));
-        assert_eq!(expected, result);
-    }
-
-    #[test]
-    fn test_empty_input() {
-        let input: Vec<(usize, &[u8])> = vec![];
-        let expected = "";
-        let result = back_to_string(non_logical_newline_striping(input));
-        assert_eq!(expected, result);
-    }
-
-    #[test]
-    fn test_no_newlines() {
-        let input = vec![(0, b"HelloWorld".as_ref())];
-        let expected = "HelloWorld";
-        let result = back_to_string(non_logical_newline_striping(input));
-        assert_eq!(expected, result);
-    }
-
-    #[test]
-    fn test_only_escaped_newlines() {
-        let input = vec![(0, b"\\\n\\\n".as_ref())];
-        let expected = "";
-        let result = back_to_string(non_logical_newline_striping(input));
-        assert_eq!(expected, result);
-    }
-
-    #[test]
-    fn test_mixed_input() {
-        let input = vec![(0, b"Line1\\\nLine2\nLine3\\\nLine4\n".as_ref())];
-        let expected = "Line1Line2\nLine3Line4\n";
-        let result = back_to_string(non_logical_newline_striping(input));
-        assert_eq!(expected, result);
-    }
+    res
 }

@@ -14,86 +14,72 @@
 //          ??-      ~
 
 use core::str;
-use std::{slice::Windows, str::Utf8Chunk};
+use std::{mem::transmute, slice::Windows, str::Utf8Chunk};
 
 use num_traits::ops::bytes;
 
-// Fast AF trigraph converter
-// This requires little 
-pub fn trigraph_convert<'a>(input: &'a [u8]) -> Vec<(usize, &'a [u8])> {
-    // Most people don't use trigraphs, so reserving is not necessary
-    let mut res = Vec::new();
 
-    let mut i = 0;
-    let mut oldest_non_trigraph = 0;
+pub fn trigraph_convert(input: &str) -> String {
+    // Most people don't use trigraphs, so soo much space is needed
+    let mut res = String::with_capacity(input.len());
+
     let len = input.len();
-    
-    while i+3 <= len {
-        let window = &input[i..i + 3];
 
-        if window[0] != b'?' || window[1] != b'?' {
-            i += 1;
-            continue;
-        }
+    let mut u8chars = input.chars();
 
-        let replacement = match window[2] {
-            b'=' => b"#",
-            b'(' => b"[",
-            b'/' => b"\\",
-            b')' => b"]",
-            b'\'' =>b"^",
-            b'<' => b"{",
-            b'!' => b"|",
-            b'>' => b"}",
-            b'-' => b"~",
+    let next_three = (u8chars.next(), u8chars.next(), u8chars.next());
+
+    if next_three.2.is_none() {
+        if let Some(c) = next_three.0 {res.push(c);}
+        if let Some(c) = next_three.1 {res.push(c);}
+        return res;
+    };
+
+    let mut next_three = (
+        next_three.0.unwrap(),
+        next_three.1.unwrap(),
+        next_three.2.unwrap(),
+    );
+    loop {
+        match next_three {
+            ('?', '?', '=') => res.push('#'),
+            ('?', '?', '(') => res.push('['),
+            ('?', '?', '/') => res.push('\\'),
+            ('?', '?', ')') => res.push(']'),
+            ('?', '?', '\'') => res.push('^'),
+            ('?', '?', '<') => res.push('{'),
+            ('?', '?', '!') => res.push('|'),
+            ('?', '?', '>') => res.push('}'),
+            ('?', '?', '-') => res.push('~'),
             _ => {
-                i += 1;
+                res.push(next_three.0);
+                next_three.0 = next_three.1;
+                next_three.1 = next_three.2;
+                next_three.2 = match (u8chars.next()) {
+                    Some(c) => c,
+                    None => {
+                        res.push(next_three.0);
+                        res.push(next_three.1);
+                        break;
+                    }
+                };
                 continue;
             }
-        };
-
-        // Push non-trigraph part
-        if oldest_non_trigraph != i {
-            res.push((oldest_non_trigraph, (&input[oldest_non_trigraph..i])));
         }
+        let next_three_opt = (u8chars.next(), u8chars.next(), u8chars.next());
+        if (next_three_opt.2.is_some()) {
+            next_three = (
+                next_three_opt.0.unwrap(),
+                next_three_opt.1.unwrap(),
+                next_three_opt.2.unwrap(),
+            );
+            continue;
+        }
+        if let Some(c) = next_three_opt.0{ res.push(c) };
+        if let Some(c) = next_three_opt.1{ res.push(c) };
+        break;
 
-        // Push trigraph replacement
-        res.push((i, replacement));
-
-        // Skip the 3 characters of the trigraph
-        i += 3;
-        oldest_non_trigraph = i;
-    }
-
-    // Add any remaining non-trigraph text
-    if oldest_non_trigraph < len {
-        res.push((oldest_non_trigraph, &input[oldest_non_trigraph..len]));
     }
 
     res
-}
-
-
-#[cfg(test)]
-mod tests{
-    use super::*;
-    fn simple(){
-        assert_eq!(trigraph_convert(b"//          ??=      #
-    //          ??(      [
-    //          ??/      \\
-    //          ??)      ]
-    //          ??'      ^
-    //          ??<      {
-    //          ??!      |
-    //          ??>      }
-    //          ??-      ~").iter().map(|t| t.1).collect::<Vec<_>>().concat(), b"//          #      #
-    //          [      [
-    //          \\      \\
-    //          ]      ]
-    //          ^      ^
-    //          {      {
-    //          |      |
-    //          }      }
-    //          ~      ~")
-    }
 }
