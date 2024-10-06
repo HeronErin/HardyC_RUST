@@ -19,12 +19,10 @@ pub fn non_logical_newline_striping<'a>(input: Vec<(usize, &'a [u8])>) -> Vec<(u
 
     let mut is_after_backslash = false;
     let mut i = 0;
-    let mut last_join_point = 0;
     loop {
         if i >= bytes.len(){
             result.push((last_file_index, bytes));
             i = 0;
-            last_join_point = 0;
 
             (last_file_index, bytes) = match itr.next() {
                 Some(x) => *x,
@@ -49,9 +47,9 @@ pub fn non_logical_newline_striping<'a>(input: Vec<(usize, &'a [u8])>) -> Vec<(u
                let before = &bytes[..i - 1];
                bytes = &bytes[i+1..];
                
-               result.push((last_join_point, before));
+               result.push((last_file_index, before));
 
-               last_join_point += i+1;
+               last_file_index += i+1;
 
                is_after_backslash = false;
             }
@@ -69,8 +67,42 @@ pub fn non_logical_newline_striping<'a>(input: Vec<(usize, &'a [u8])>) -> Vec<(u
     return result;
 }
 
+// Turns "/*   */" -> " "
+pub fn star_comment_striper<'a>(input: Vec<(usize, &'a [u8])>) -> Vec<(usize, &'a [u8])>{
+    let mut result = Vec::with_capacity(input.capacity());
+    let mut itr = input.iter();
+    let (mut last_file_index, mut bytes) = match itr.next() {
+        Some(x) => x,
+        None => return result
+    };
+
+    let mut is_within_comment = false;
+    let mut i = 0;
+    loop{
+        if i+1 >= bytes.len(){
+            if !is_within_comment{
+                result.push((last_file_index, bytes));
+            }
+            i = 0;
+
+            (last_file_index, bytes) = match itr.next() {
+                Some(x) => *x,
+                None => break
+            };
+        }
+        if (!is_within_comment && bytes[i] == b'/' && bytes[i+1] == b'*'){
+            is_within_comment = true;
+            
+        }
+        
 
 
+        i+=1;
+    }
+
+
+    return result;
+}
 
 // Not that fast, but good for tests
 fn back_to_string(pieces :  Vec<(usize, &[u8])>) -> String{

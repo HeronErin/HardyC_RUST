@@ -27,7 +27,7 @@ pub fn trigraph_convert<'a>(input: &'a [u8]) -> Vec<(usize, &'a [u8])> {
     let mut i = 0;
     let mut oldest_non_trigraph = 0;
     let len = input.len();
-
+    
     while i+3 <= len {
         let window = &input[i..i + 3];
 
