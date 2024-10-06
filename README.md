@@ -1,2 +1,2 @@
 # HardyC
-A C **style** programming language. 
+A mostly ansi C compliant compiler
