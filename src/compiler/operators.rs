@@ -11,8 +11,30 @@ pub enum Bracket{
     SquareBracket // [] ALSO digraphs: <: :>
 }
 
+impl Bracket {
+    #[inline]
+    pub fn try_from(i : &str) -> Option<(usize, bool, Bracket)>{
+        let mut chrs = i.chars();
+        let first = chrs.next()?;
+        match first {
+            '(' | ')' => return Some((1, first == '(', Bracket::Parenthesis)),
+            '{' | '}' => return Some((1, first == '{', Bracket::CurlyBracket)),
+            '[' | ']' => return Some((1, first == '[', Bracket::SquareBracket)),
+            _ => {}
+        };
+        let second = chrs.next()?;
+        match (first, second) {
+            ('<','%') => Some((2, true, Bracket::CurlyBracket)),
+            ('%','>') => Some((2, false, Bracket::CurlyBracket)),
+            ('<',':') => Some((2, true, Bracket::SquareBracket)),
+            (':','>') => Some((2, false, Bracket::SquareBracket)),
+            _ => None
+        }        
+    }
+}
 
-genStrType!(Operators, OPERATORS,
+
+genStrType!(Operator, OPERATORS,
     Period => ".";
     Arrow => "->";
     Increment => "++";
@@ -41,8 +63,6 @@ genStrType!(Operators, OPERATORS,
 
     BitwiseXorEq => "^=";
     BitwiseXor => "^";
-
-    SizeOf => "sizeof";
 
     DivideEq => "/=";
     Divide => "/";

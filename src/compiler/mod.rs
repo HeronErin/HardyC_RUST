@@ -4,7 +4,7 @@ pub mod operators;
 
 
 pub mod error;
-
+pub mod compile_time_exec;
 
 #[macro_export]
 macro_rules! genStrType {
@@ -26,16 +26,21 @@ macro_rules! genStrType {
         }
 
         impl $name {
-            pub fn try_from_string(x: &str) -> Option<Self> {
+      
+            pub fn try_from_string(x: &str) -> Option<(usize, Self)> {
                 if x.len() <= 1 { return None; }
 
                 $(
                     $(
-                        if x.starts_with($text) {
-                            return Some(Self::$element);
+                        if x.len() >=  $text.len(){
+                            match &x[0..$text.len()]{
+                                $text => return Some(($text.len(), Self::$element)),
+                                _ => {}
+                            }
                         }
                     )+
                 )*
+
 
                 None
             }

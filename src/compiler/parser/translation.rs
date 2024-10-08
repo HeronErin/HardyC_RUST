@@ -146,3 +146,14 @@ pub fn strip_single_line_style_comments(input : &str) -> String{
 
     res
 }
+
+
+
+
+pub fn initial_translation_phases(inputc : &str) -> String{
+    let p1 = super::trigraph::trigraph_convert(inputc);
+    let p2 = non_logical_newline_striping(&p1);
+    let p3 = strip_star_style_comments(&p2);
+    strip_single_line_style_comments(&p3)
+}
+
