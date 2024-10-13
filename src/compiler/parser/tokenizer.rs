@@ -34,7 +34,7 @@ pub fn test_number_extent(input : &str) -> usize{
             _ => {}
         }
         
-        return i-1;
+        return i;
     }
     return input.len();
 }
@@ -145,7 +145,7 @@ pub fn tokenize<'a>(mut inputc : &'a str) -> Result<Vec<Token<'a>>, CompilerErro
                 inputc = new_inputc;
                 continue;
             },
-            
+
             // Taken from is_ascii_punctuation
             '!'..='/' | ':'..='@' | '['..='`' | '{'..='~'  => {
                 if let Some((size, is_open, bracket)) = Bracket::try_from(&inputc){

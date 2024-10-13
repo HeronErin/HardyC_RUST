@@ -3,7 +3,7 @@
 mod compiler;
 use std::{collections::HashMap, hint};
 
-use compiler::parser::{tokenizer::tokenize, translation::{non_logical_newline_striping, strip_single_line_style_comments, strip_star_style_comments}, trigraph::trigraph_convert};
+use compiler::parser::{string_patch_resolver::PatchString, tokenizer::tokenize, translation::{non_logical_newline_striping, strip_single_line_style_comments, strip_star_style_comments}, trigraph::trigraph_convert};
 
 const SAMPLE : &str = "
 
@@ -32,13 +32,40 @@ int main()<%
 
 
 ";
+// const x = [1, 2, 3];
+use compiler::parser::string_patch_resolver::RebuildAction::*;
 fn main() {
-    let logical = compiler::parser::translation::initial_translation_phases(SAMPLE);
-    println!("{:?}", tokenize(&logical).unwrap());
-    // println!("{:?}", p2.iter().map(|x| String::from_utf8_lossy(x.1)).collect::<Vec<_>>().concat());
-    // println!("{:?}", t);
-    // println!("{:?}", test_tokens_against(FUNCTION_DECLARATION, &ts));
+    let og = "Boo Far Faz!";
+    let mut ps = PatchString::new(String::from(og));
+    
+    // TODO: Why tf is a window of two not working?????
+    ps.rebuild_string_windowed(|window : [char; 2]|{
+        if window[0] == 'F'{
+            return DiscardAndInsert(1, "B-");
+        }
+        if window[0] == 'B'{
+            return DiscardAndInsert(1, "F-");
+        }
 
-    // SAMPLE.to_string()
+        return Keep
+    });
+ 
+
+
+    dbg!(ps.get_str());
+    println!("from_mod_index:");
+
+
+    let old: Vec<char> = og.chars().collect();
+    for (i, chr) in ps.get_str().char_indices(){
+        println!("{} {} - {} @ {}", chr, old[ps.from_mod_index(i)], ps.from_mod_index(i), i);
+    }
+
+    println!("____________________\nto_mod_index:");
+    let start : Vec<char> = ps.get_str().chars().collect();
+    for (i, chr) in og.char_indices(){
+        println!("{} {} - {} @ {}", chr, start[ps.to_mod_index(i)], ps.to_mod_index(i), i);
+    }
+
     
 }
