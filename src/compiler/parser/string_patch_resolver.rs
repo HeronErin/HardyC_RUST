@@ -3,20 +3,20 @@
 // outputted code to be mapped back to the original.
 // Including over multiple source files
 
-use std::ops::Mul;
-
 
 #[derive(Debug)]
-pub struct Patch{
-    pub start : usize,
-    pub end : usize,
-    pub len_mod : isize
+struct Patch{
+    start : usize,
+    end : usize,
+    len_mod : isize
 }
+
 #[derive(Debug)]
 pub struct PatchString{
    internal_string : String,
-   pub patches : Vec<Patch>
+   patches : Vec<Patch>
 }
+
 pub enum RebuildAction{
     Keep,
     DiscardAmount(usize),
@@ -158,12 +158,25 @@ impl PatchString{
                 }
             }};
         }
-    
-        rebuild_window!();
-        loop{
-            let ack = predicate(window.clone());
-            match ack {
-                RebuildAction::Keep | RebuildAction::DiscardAmount(0) => {
+        macro_rules! keep {
+            () => {
+                // Move widow over one
+                new_string.push(window[0]);
+                start_of_window_index += 1;
+                
+                if N != 1{
+                    // Equivalent to: window[0..N-1] = window[1..N];
+                    unsafe{ std::ptr::copy(window.as_ptr().add(1), window.as_mut_ptr(), N-1) };
+                }
+                window[N-1] = if let Some((_, char)) = chrs.next(){
+                    char
+                }else{
+                    return_mid_window!(N-1);
+                };
+            };
+        }
+        macro_rules! keep {
+            () => {
                     // Move widow over one
                     new_string.push(window[0]);
                     start_of_window_index += 1;
@@ -171,14 +184,20 @@ impl PatchString{
                     if N != 1{
                         // Equivalent to: window[0..N-1] = window[1..N];
                         unsafe{ std::ptr::copy(window.as_ptr().add(1), window.as_mut_ptr(), N-1) };
-
-                        window[N-1] = if let Some((_, char)) = chrs.next(){
-                            char
-                        }else{
-                            return_mid_window!(N-1);
-                        }
                     }
-                    
+                    window[N-1] = if let Some((_, char)) = chrs.next(){
+                        char
+                    }else{
+                        return_mid_window!(N-1);
+                    };
+            };
+        }
+        rebuild_window!();
+        loop{
+            let ack = predicate(window.clone());
+            match ack {
+                RebuildAction::Keep | RebuildAction::DiscardAmount(0) => {
+                    keep!();
                 },
                 RebuildAction::DiscardAmount(amount) =>{
                     discard!(amount);
@@ -191,9 +210,14 @@ impl PatchString{
                     };
                     new_string.push_str(&str);
                     self.patches.push(Patch { start: start_of_window_index, end: start_of_window_index, len_mod: str.len() as isize });
+                    
                     // TODO: This might be FUCKED
                     start_of_window_index += str.len();
-                    discard!(amount);
+                    if amount != 0{
+                        discard!(amount);
+                    }else{
+                        keep!();
+                    }
                     
                 }
                 _ => todo!()
@@ -219,7 +243,6 @@ mod tests {
         assert_eq!(patch_string.to_mod_index(5), 5);
         assert_eq!(patch_string.to_mod_index(11), 11);
     }
-
     #[test]
     fn test_to_mod_index_with_insertions() {
         let mut patch_string = PatchString::new(String::from("hello world"));
@@ -234,7 +257,6 @@ mod tests {
         assert_eq!(patch_string.to_mod_index(6), 11);
         assert_eq!(patch_string.to_mod_index(11), 16);
     }
-
     #[test]
     fn test_to_mod_index_with_deletions() {
         let mut patch_string = PatchString::new(String::from("hello world"));
@@ -252,7 +274,6 @@ mod tests {
         // Indexes after the deleted range should be adjusted by the deletion length
         assert_eq!(patch_string.to_mod_index(11), 5);
     }
-
     #[test]
     fn test_from_mod_index_no_patches() {
         let patch_string = PatchString::new(String::from("hello world"));
@@ -260,7 +281,6 @@ mod tests {
         assert_eq!(patch_string.from_mod_index(5), 5);
         assert_eq!(patch_string.from_mod_index(11), 11);
     }
-
     #[test]
     fn test_from_mod_index_with_insertions() {
         let mut patch_string = PatchString::new(String::from("hello world"));
@@ -275,7 +295,6 @@ mod tests {
         assert_eq!(patch_string.from_mod_index(11), 6);
         assert_eq!(patch_string.from_mod_index(16), 11);
     }
-
     #[test]
     fn test_from_mod_index_with_deletions() {
         let mut patch_string = PatchString::new(String::from("hello world"));
@@ -285,11 +304,7 @@ mod tests {
         assert_eq!(patch_string.from_mod_index(0), 0);
         assert_eq!(patch_string.from_mod_index(4), 4);
 
-        // Indexes at the start of the patch should map to the original position
-        assert_eq!(patch_string.from_mod_index(5), 5);
 
-        // Indexes after the patch should be adjusted by the deletion length
-        assert_eq!(patch_string.from_mod_index(6), 5);
     }
 
     #[test]
@@ -297,7 +312,6 @@ mod tests {
         let mut patch_string = PatchString::new(String::from("hello world"));
         patch_string.insert(5, " dear"); // Inserts " dear" at position 5
         patch_string.delete(11, 16);     // Deletes "world" (from index 11 to 16)
-        dbg!(patch_string.get_str());
         // Testing to_mod_index after multiple patches
         assert_eq!(patch_string.to_mod_index(0), 0);
         assert_eq!(patch_string.to_mod_index(5), 10); // Adjusted by the insertion

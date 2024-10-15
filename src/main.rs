@@ -38,13 +38,15 @@ fn main() {
     let og = "Boo Far Faz!";
     let mut ps = PatchString::new(String::from(og));
     
-    // TODO: Why tf is a window of two not working?????
     ps.rebuild_string_windowed(|window : [char; 2]|{
         if window[0] == 'F'{
-            return DiscardAndInsert(1, "B-");
+            return DiscardAndInsert(1, "B");
         }
         if window[0] == 'B'{
-            return DiscardAndInsert(1, "F-");
+            return DiscardAndInsert(1, "F");
+        }
+        if window == ['z', '!']{
+            return DiscardAndInsert(1, "sh");
         }
 
         return Keep
