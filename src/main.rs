@@ -40,5 +40,8 @@ fn main() {
     
     let ps = initial_translation_phases(og);
     println!("{}", ps.get_str());
+    let i = ps.get_str().len() - 2;
+    println!("{:?}", &ps.get_str()[i..]);
+    println!("{:?}", &og[ps.from_mod_index(i)..]);
     
 }

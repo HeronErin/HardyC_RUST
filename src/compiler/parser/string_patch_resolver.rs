@@ -96,16 +96,17 @@ impl PatchString{
 
         index.max(0) as usize
     }
-
-
+    #[inline]
     pub fn construct_from<const N : usize>(input : &str, mut predicate : impl FnMut([char; N]) -> RebuildAction) -> Self{
+        Self::_construct_from(input, Vec::new(), predicate)
+    }
+    fn _construct_from<const N : usize>(input : &str, mut patches : Vec<Patch>, mut predicate : impl FnMut([char; N]) -> RebuildAction) -> Self{
         assert!(N != 0, "A window cannot be zero!");
 
         let mut window : [char; N] = ['\x00'; N];
         let mut chrs = input.char_indices();
 
         let mut new_string = String::with_capacity(input.len());
-        let mut patches = Vec::new();
 
         // This is the index in the MODIFIED STRING, not the old string
         let mut start_of_window_index = 0;
@@ -196,7 +197,6 @@ impl PatchString{
                 RebuildAction::Keep | RebuildAction::DiscardAmount(0) => {
                     keep!();
                 }
-                RebuildAction::DiscardAmount(1) => {advance!(false)},
                 RebuildAction::DiscardAmount(amount) =>{
                     discard!(amount);
                 },
@@ -225,12 +225,12 @@ impl PatchString{
             } 
         }
     }
-
+    #[inline]
     pub fn rebuild_string_windowed<const N : usize>(&mut self, predicate : impl FnMut([char; N]) -> RebuildAction){
-        
-        let mut new = Self::construct_from(self.internal_string.as_str(), predicate);
-        self.patches.append(&mut new.patches);
-        self.internal_string = new.internal_string;
+        // Steal patches, this way we don't need to copy every patch
+        let patches = std::mem::take(&mut self.patches);
+        *self = Self::_construct_from(self.internal_string.as_str(), patches, predicate);
+   
     }
     
 }
