@@ -6,154 +6,118 @@
 // 2. Non-logical newline striping (I.e "\\\n" -> "")
 // 3. Comments
 
+use super::string_patch_resolver::PatchString;
 
+use super::string_patch_resolver::RebuildAction::*;
+
+// Replaces all trigraphs with their canonical characters
+pub fn trigraph_convert(input: &str) -> PatchString {
+    return PatchString::construct_from(input, |window : [char; 3]|{
+        match window {
+            ['?', '?', '='] => DiscardAndInsert(3, "#"),
+            ['?', '?', '('] => DiscardAndInsert(3, "["),
+            ['?', '?', '/'] => DiscardAndInsert(3, "\\"),
+            ['?', '?', ')'] => DiscardAndInsert(3, "]"),
+            ['?', '?', '\''] => DiscardAndInsert(3, "^"),
+            ['?', '?', '<'] => DiscardAndInsert(3, "{"),
+            ['?', '?', '!'] => DiscardAndInsert(3, "|"),
+            ['?', '?', '>'] => DiscardAndInsert(3, "}"),
+            ['?', '?', '-'] => DiscardAndInsert(3, "~"),
+            _ => Keep
+        }
+    });
+}
 
 // Turns "\\\n" -> ""
-pub fn non_logical_newline_striping(input: &str) -> String{
-    let mut res = String::with_capacity(input.len());
-
-
-    let mut utf8chars = input.chars();
-
-    let next_two = (utf8chars.next(), utf8chars.next());
-    
-    
-    if next_two.1.is_none() {
-        if let Some(c) = next_two.0 {res.push(c);}
-        return res;
-    }
-    let mut next_two = (next_two.0.unwrap(), next_two.1.unwrap());
-    loop{
-        if ('\\', '\n') == next_two{
-            let next_two_opt = (utf8chars.next(), utf8chars.next());
-            if next_two_opt.1.is_none() {
-                if let Some(c) = next_two_opt.0 {res.push(c);}
-                return res;
-            }
-            next_two = (next_two_opt.0.unwrap(), next_two_opt.1.unwrap());
-            continue;
+pub fn non_logical_newline_striping(input: &mut PatchString){
+    let mut was_previous_escape = false;
+    input.rebuild_string_windowed( move |window : [char; 2]|{
+        if window == ['\\', '\n'] && !was_previous_escape{
+            return DiscardAmount(2)    
         }
-        res.push(next_two.0);
-        next_two.0 = next_two.1;
-        next_two.1 = match utf8chars.next() {
-            Some(c) => c,
-            None => {res.push(next_two.0); break;},
+        if window[0] == '\\'{
+            was_previous_escape = true;
+        }else{
+            was_previous_escape = false;
         }
-        
-    }
-
-
-    res
+        Keep
+    });
 }
 
-
-pub fn strip_star_style_comments(input : &str) -> String{
-    let mut res = String::with_capacity(input.len());
-
-
-    let mut utf8chars = input.chars();
-    let next_two = (utf8chars.next(), utf8chars.next());
-    
-    if next_two.1.is_none() {
-        if let Some(c) = next_two.0 {res.push(c);}
-        return res;
+fn string_heuristic(curr : char, was_backslash : &mut bool, is_in_string : &mut bool){
+    if curr == '\\'{
+        *was_backslash = !*was_backslash;
+        return;
+    }
+    if curr == '\"' && !*is_in_string{
+        *is_in_string = true;
+        return;
+    }
+    if curr == '\"' && *is_in_string && !*was_backslash{
+        *is_in_string = false;
     }
 
+}
+pub fn strip_star_style_comments(input : &mut PatchString){
     let mut is_in_comment = false;
-    let mut next_two = (next_two.0.unwrap(), next_two.1.unwrap());
-
-   
-    macro_rules! move_forward_from_match {
-        () => {
-            let next_two_opt = (utf8chars.next(), utf8chars.next());
-            if next_two_opt.1.is_none() {
-                if let Some(c) = next_two_opt.0 {if !is_in_comment { res.push(c); }}
-                return res;
-            }
-            next_two = (next_two_opt.0.unwrap(), next_two_opt.1.unwrap());
-            continue;
-
-        };
-    }
-    loop{
-       
-        if !is_in_comment && ('/', '*') == next_two{
-            is_in_comment = true;
-            res.push(' '); // "Each comment is replaced by one space character" ok...
-            move_forward_from_match!();
-        }
-        // "21. Thus comments do not nest." saves me the work
-        else if is_in_comment && ('*', '/') == next_two{
-            is_in_comment = false;
-            move_forward_from_match!();
-        }
-
-
-        if !is_in_comment{ res.push(next_two.0); }
-        next_two.0 = next_two.1;
-        next_two.1 = match utf8chars.next() {
-            Some(c) => c,
-            None => {if !is_in_comment {res.push(next_two.0);} break;},
+    let mut is_in_string = false;
+    let mut was_backslash = false;
+    input.rebuild_string_windowed(move |window : [char; 2]|{
+        string_heuristic(window[0], &mut was_backslash, &mut is_in_string);
+        if is_in_string && !is_in_comment{
+            return Keep;
         }
         
-    }
-
-
-    res
-}
-
-
-
-// Not technically in the ansi.c spec, but i want it!
-pub fn strip_single_line_style_comments(input : &str) -> String{
-    let mut res = String::with_capacity(input.len());
-
-
-    let mut utf8chars = input.chars();
-    let next_two = (utf8chars.next(), utf8chars.next());
+        if is_in_comment{
+            if window == ['*', '/']{
+                is_in_comment = false;
+                DiscardAmount(2)
+            }else{ DiscardAmount(1) }
+        }
+        else if window == ['/', '*']{
+            is_in_comment = true;
+            DiscardAndInsert(2, " ")
+        }else{ Keep }
     
-    if next_two.1.is_none() {
-        if let Some(c) = next_two.0 {res.push(c);}
-        return res;
-    }
+    });
+}
 
+
+
+// Not technically in the ansi.c spec, but I want it!
+pub fn strip_single_line_style_comments(input : &mut PatchString){
     let mut is_in_comment = false;
-    let mut next_two = (next_two.0.unwrap(), next_two.1.unwrap());
-   
-    loop{
-        if !is_in_comment && next_two == ('/', '/'){
-            is_in_comment = true;
-            // Don't think a space is needed as a newline is inserted soon
-            // (assuming this comment is not at the end of a file)
-            let next_two_opt = (utf8chars.next(), utf8chars.next());
-            if next_two_opt.1.is_none() { return res; }
-            next_two = (next_two_opt.0.unwrap(), next_two_opt.1.unwrap());
-            continue;
-        }   
-        if next_two.0 == '\n'{
+    let mut is_in_string = false;
+    let mut was_backslash: bool = false;
+    input.rebuild_string_windowed(move |window : [char; 2]|{
+        string_heuristic(window[0], &mut was_backslash, &mut is_in_string);
+        if is_in_string && !is_in_comment{
+            return Keep;
+        }
+
+        if is_in_comment && window[1] == '\n'{
             is_in_comment = false;
+            return DiscardAmount(1);
+        }
+        if window == ['/', '/']{
+            is_in_comment = true;
+        }
+        if is_in_comment{
+            return DiscardAmount(1);
         }
 
-        if !is_in_comment{ res.push(next_two.0); }
-        next_two.0 = next_two.1;
-        next_two.1 = match utf8chars.next() {
-            Some(c) => c,
-            None => {if !is_in_comment {res.push(next_two.0);} break;},
-        }
-        
-    }
-
-
-    res
+        Keep
+    });
 }
 
 
 
 
-pub fn initial_translation_phases(inputc : &str) -> String{
-    let p1 = super::trigraph::trigraph_convert(inputc);
-    let p2 = non_logical_newline_striping(&p1);
-    let p3 = strip_star_style_comments(&p2);
-    strip_single_line_style_comments(&p3)
+pub fn initial_translation_phases(inputc : &str) -> PatchString{
+    let mut new = trigraph_convert(inputc);
+    non_logical_newline_striping(&mut new);
+    strip_star_style_comments(&mut new);
+    strip_single_line_style_comments(&mut new);
+    new
 }
 

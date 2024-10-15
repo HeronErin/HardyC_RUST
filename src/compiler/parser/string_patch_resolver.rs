@@ -22,7 +22,6 @@ pub enum RebuildAction{
     DiscardAmount(usize),
     DiscardAndInsert(usize, &'static str),
     DiscardAndInsertString(usize, String),
-
 }
 
 
@@ -37,6 +36,9 @@ impl PatchString{
     pub fn get_str<'a>(&'a self) -> &'a str{
         &self.internal_string
     }
+    // Scalps the PatchString and turns it into the proper String
+    pub fn into_string(self) -> String{self.internal_string}
+    
     // WARNING: O(N + O)
     // Requires copying both the input string, and copying any remainder
     // in the patch string pos.len() to the right
@@ -95,14 +97,15 @@ impl PatchString{
         index.max(0) as usize
     }
 
-    pub fn rebuild_string_windowed<const N : usize>(&mut self, predicate : fn([char; N]) -> RebuildAction){
-        debug_assert!(N != 0, "A window cannot be zero!");
+
+    pub fn construct_from<const N : usize>(input : &str, mut predicate : impl FnMut([char; N]) -> RebuildAction) -> Self{
+        assert!(N != 0, "A window cannot be zero!");
 
         let mut window : [char; N] = ['\x00'; N];
-        let mut chrs = self.internal_string.char_indices();
+        let mut chrs = input.char_indices();
 
-        let mut new_string = String::with_capacity(self.internal_string.capacity());
-
+        let mut new_string = String::with_capacity(input.len());
+        let mut patches = Vec::new();
 
         // This is the index in the MODIFIED STRING, not the old string
         let mut start_of_window_index = 0;
@@ -113,9 +116,11 @@ impl PatchString{
             ($into_window:expr) => {
                 for i in 0..$into_window{
                     new_string.push(window[i]);
-                }
-                self.internal_string = new_string;
-                return;
+                };
+                return Self{
+                    internal_string : new_string,
+                    patches
+                };
             };
         }
         macro_rules! rebuild_window {
@@ -133,7 +138,7 @@ impl PatchString{
         macro_rules! discard {
             ($amount : expr) => {{
                 let mut amount = $amount;
-                self.patches.push(Patch{
+                patches.push(Patch{
                     start: start_of_window_index,
                     end: amount + start_of_window_index,
                     len_mod: -(amount as isize),
@@ -158,12 +163,11 @@ impl PatchString{
                 }
             }};
         }
-        macro_rules! keep {
-            () => {
-                // Move widow over one
-                new_string.push(window[0]);
+  
+        macro_rules! advance {
+            ($do_err:literal) => {{
                 start_of_window_index += 1;
-                
+                    
                 if N != 1{
                     // Equivalent to: window[0..N-1] = window[1..N];
                     unsafe{ std::ptr::copy(window.as_ptr().add(1), window.as_mut_ptr(), N-1) };
@@ -171,25 +175,18 @@ impl PatchString{
                 window[N-1] = if let Some((_, char)) = chrs.next(){
                     char
                 }else{
-                    return_mid_window!(N-1);
+                    // If we are in a discard we do not want to keep any
+                    // remaining window chars, as such such use 0. 
+                    // Which does nothing but return
+                    return_mid_window!(if $do_err {N-1} else {0});
                 };
-            };
+            }};
         }
         macro_rules! keep {
             () => {
                     // Move widow over one
                     new_string.push(window[0]);
-                    start_of_window_index += 1;
-                    
-                    if N != 1{
-                        // Equivalent to: window[0..N-1] = window[1..N];
-                        unsafe{ std::ptr::copy(window.as_ptr().add(1), window.as_mut_ptr(), N-1) };
-                    }
-                    window[N-1] = if let Some((_, char)) = chrs.next(){
-                        char
-                    }else{
-                        return_mid_window!(N-1);
-                    };
+                    advance!(true);
             };
         }
         rebuild_window!();
@@ -198,7 +195,8 @@ impl PatchString{
             match ack {
                 RebuildAction::Keep | RebuildAction::DiscardAmount(0) => {
                     keep!();
-                },
+                }
+                RebuildAction::DiscardAmount(1) => {advance!(false)},
                 RebuildAction::DiscardAmount(amount) =>{
                     discard!(amount);
                 },
@@ -209,12 +207,14 @@ impl PatchString{
                         _ => unreachable!()
                     };
                     new_string.push_str(&str);
-                    self.patches.push(Patch { start: start_of_window_index, end: start_of_window_index, len_mod: str.len() as isize });
+                    patches.push(Patch { start: start_of_window_index, end: start_of_window_index, len_mod: str.len() as isize });
                     
                     // TODO: This might be FUCKED
                     start_of_window_index += str.len();
-                    if amount != 0{
+                    if amount > 1{
                         discard!(amount);
+                    }else if amount == 1{
+                        advance!(false);
                     }else{
                         keep!();
                     }
@@ -222,10 +222,15 @@ impl PatchString{
                 }
                 _ => todo!()
          
-            }
-
-          
+            } 
         }
+    }
+
+    pub fn rebuild_string_windowed<const N : usize>(&mut self, predicate : impl FnMut([char; N]) -> RebuildAction){
+        
+        let mut new = Self::construct_from(self.internal_string.as_str(), predicate);
+        self.patches.append(&mut new.patches);
+        self.internal_string = new.internal_string;
     }
     
 }
