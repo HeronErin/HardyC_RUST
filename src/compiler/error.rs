@@ -1,11 +1,21 @@
+use std::io;
+
 
 #[derive(Debug)]
 pub enum ErrorVariety{
-    BracketCountError
+    FileNotFoundError,
+    IsDirectoryError,
+
+    BracketCountError,
+    IoError(io::Error),
+    
+    // Macro errors
+    RecursiveMacroError,
+    MacroMissingCorresponding
 }
 
 #[derive(Debug)]
 pub struct CompilerError{
-    error_variety : ErrorVariety,
-    info : String,
+    pub error_variety : ErrorVariety,
+    pub info : String,
 }

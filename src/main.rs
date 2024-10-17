@@ -1,8 +1,11 @@
 #![allow(unused)]
 
 mod compiler;
+use std::fs::File;
+use std::path::Path;
 use std::{collections::HashMap, hint};
 
+use compiler::parser::tokenizer::tokenize;
 use compiler::parser::translation::{initial_translation_phases, strip_star_style_comments};
 use compiler::parser::{translation::trigraph_convert};
 
@@ -34,14 +37,21 @@ int main()<%
     printf(\"foo\");
 %>";
 // const x = [1, 2, 3];
-use compiler::parser::string_patch_resolver::RebuildAction::*;
+use compiler::parser::string_patch_resolver::{PatchString, RebuildAction::*};
+use compiler::state::TranslationUnit;
 fn main() {
-    let og = SAMPLE;
+    let mut unit = TranslationUnit{ path: vec![Path::new(".")], files: Vec::new() };
     
-    let ps = initial_translation_phases(og);
-    println!("{}", ps.get_str());
-    let i = ps.get_str().len() - 2;
-    println!("{:?}", &ps.get_str()[i..]);
-    println!("{:?}", &og[ps.from_mod_index(i)..]);
+    let og = "#include \"examples/main.h\"";
+    let mut ps = PatchString::new(og.to_string());
+    
+    initial_translation_phases(&mut ps);
+    
+    unit.files.push(("main.c".to_string(), og.to_string(), ps));
+    let r = unit.files.last().unwrap();
+
+
+    let toks = tokenize(&r.2.get_str(), unit.files.len()-1).unwrap();
+    
     
 }

@@ -27,12 +27,18 @@ pub enum RebuildAction{
 
 
 impl PatchString{
+    #[inline]
     pub fn new(input : String) -> PatchString{
         PatchString{
             internal_string: input,
             patches: Vec::new(),
         }
     }
+    #[inline]
+    pub fn from(input : &str) -> PatchString{
+        Self::new(input.to_string())
+    }
+    #[inline]
     pub fn get_str<'a>(&'a self) -> &'a str{
         &self.internal_string
     }
@@ -66,6 +72,7 @@ impl PatchString{
             len_mod: real_start as isize - real_end as isize,
         });
     }
+
 
     pub fn from_mod_index(&self, mod_index: usize) -> usize {
         let mut index = mod_index as isize;
@@ -128,7 +135,7 @@ impl PatchString{
             () => {
                 for i in 0..N{
                     let char_opt = chrs.next();
-                    window[i] = if let Some((ind, char)) = char_opt {
+                    window[i] = if let Some((_, char)) = char_opt {
                         char
                     } else{
                         return_mid_window!(i);
@@ -209,13 +216,14 @@ impl PatchString{
                     new_string.push_str(&str);
                     patches.push(Patch { start: start_of_window_index, end: start_of_window_index, len_mod: str.len() as isize });
                     
-                    // TODO: This might be FUCKED
+                    
                     start_of_window_index += str.len();
                     if amount > 1{
                         discard!(amount);
                     }else if amount == 1{
                         advance!(false);
                     }else{
+                        // Amount is zero
                         keep!();
                     }
                     

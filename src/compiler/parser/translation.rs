@@ -8,24 +8,33 @@
 
 use super::string_patch_resolver::PatchString;
 
+use super::string_patch_resolver::RebuildAction;
 use super::string_patch_resolver::RebuildAction::*;
 
+
+const TRIGRAPH_MAP_FUNCTION : &dyn Fn([char; 3]) -> RebuildAction = &(|window : [char; 3]|{
+    match window {
+        ['?', '?', '='] => DiscardAndInsert(3, "#"),
+        ['?', '?', '('] => DiscardAndInsert(3, "["),
+        ['?', '?', '/'] => DiscardAndInsert(3, "\\"),
+        ['?', '?', ')'] => DiscardAndInsert(3, "]"),
+        ['?', '?', '\''] => DiscardAndInsert(3, "^"),
+        ['?', '?', '<'] => DiscardAndInsert(3, "{"),
+        ['?', '?', '!'] => DiscardAndInsert(3, "|"),
+        ['?', '?', '>'] => DiscardAndInsert(3, "}"),
+        ['?', '?', '-'] => DiscardAndInsert(3, "~"),
+        _ => Keep
+    }
+});
+
+
 // Replaces all trigraphs with their canonical characters
-pub fn trigraph_convert(input: &str) -> PatchString {
-    return PatchString::construct_from(input, |window : [char; 3]|{
-        match window {
-            ['?', '?', '='] => DiscardAndInsert(3, "#"),
-            ['?', '?', '('] => DiscardAndInsert(3, "["),
-            ['?', '?', '/'] => DiscardAndInsert(3, "\\"),
-            ['?', '?', ')'] => DiscardAndInsert(3, "]"),
-            ['?', '?', '\''] => DiscardAndInsert(3, "^"),
-            ['?', '?', '<'] => DiscardAndInsert(3, "{"),
-            ['?', '?', '!'] => DiscardAndInsert(3, "|"),
-            ['?', '?', '>'] => DiscardAndInsert(3, "}"),
-            ['?', '?', '-'] => DiscardAndInsert(3, "~"),
-            _ => Keep
-        }
-    });
+pub fn trigraph_convert(input:  &mut PatchString){
+    input.rebuild_string_windowed(TRIGRAPH_MAP_FUNCTION);
+}
+// Ditto
+pub fn trigraph_convert_str(input:  &str) -> PatchString{
+    PatchString::construct_from(input, TRIGRAPH_MAP_FUNCTION)
 }
 
 // Turns "\\\n" -> ""
@@ -112,12 +121,20 @@ pub fn strip_single_line_style_comments(input : &mut PatchString){
 
 
 
+#[inline]
+pub fn apply_initial_translation_phases(inputc : &mut PatchString){
+    trigraph_convert(&mut *inputc);
+    non_logical_newline_striping(&mut *inputc);
+    strip_star_style_comments(&mut *inputc);
+    strip_single_line_style_comments(&mut *inputc);
+}
 
+#[inline]
 pub fn initial_translation_phases(inputc : &str) -> PatchString{
-    let mut new = trigraph_convert(inputc);
-    non_logical_newline_striping(&mut new);
-    strip_star_style_comments(&mut new);
-    strip_single_line_style_comments(&mut new);
-    new
+    let mut ps = trigraph_convert_str(inputc);
+    non_logical_newline_striping(&mut ps);
+    strip_star_style_comments(&mut ps);
+    strip_single_line_style_comments(&mut ps);
+    ps
 }
 

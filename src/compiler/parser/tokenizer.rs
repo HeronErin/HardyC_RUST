@@ -1,5 +1,7 @@
 use crate::compiler::{error::CompilerError, keywords::Keyword, operators::{Bracket, Operator}};
 
+use super::string_patch_resolver::PatchString;
+
 #[inline]
 pub fn test_number_suffix(s : char) -> bool{
     matches!(
@@ -45,7 +47,7 @@ pub fn test_number_extent(input : &str) -> usize{
 
 
 #[derive(Debug, Clone)]
-pub enum Token<'a>{
+pub enum TokenData<'a>{
     UNKNOWN(char),
 
 
@@ -65,6 +67,20 @@ pub enum Token<'a>{
     Semicolon,
     Colon
 }
+#[derive(Debug, Clone)]
+pub struct Token<'a>{
+    pub data : TokenData<'a>,
+    
+    // Location to 
+    pub noncanonical_start : usize,
+    pub noncanonical_end : usize,
+
+    // Index into where the file exists
+    // in TranslationUnit.files
+    pub origin : usize
+}
+
+
 
 fn consume_ws<'a>(inputc : &'a str) -> Option<(usize, bool)>{
     let first = inputc.chars().next()?;
@@ -117,12 +133,25 @@ fn consume_string_literal<'a>(input : &'a str) -> (&'a str,  &'a str){
 
 
 
-pub fn tokenize<'a>(mut inputc : &'a str) -> Result<Vec<Token<'a>>, CompilerError>{
+pub fn tokenize<'a>(input_str : &'a str, origin : usize) -> Result<Vec<Token<'a>>, CompilerError>{
+    let mut inputc = input_str;
     let mut ret = Vec::new();
+
+    macro_rules! getIndex {
+        () => {
+            inputc.as_ptr() as usize - input_str.as_ptr() as usize
+        };
+    }
     
     loop {
         if let Some((count, is_newline)) = consume_ws(&inputc){
-            ret.push(if is_newline {Token::NLstyleWs} else {Token::SepStyleWS});
+            let start = getIndex!();
+            ret.push(Token{
+                data: if is_newline {TokenData::NLstyleWs} else {TokenData::SepStyleWS},
+                noncanonical_start: start,
+                noncanonical_end: start + count,
+                origin
+            });
             inputc = &inputc[count..];
         }
         let chr = inputc.chars().next();
@@ -130,55 +159,67 @@ pub fn tokenize<'a>(mut inputc : &'a str) -> Result<Vec<Token<'a>>, CompilerErro
         if let None = chr { break };
         let chr = unsafe { chr.unwrap_unchecked() };
         
+        let i = getIndex!();
+
         match chr {
+            ';'  => ret.push(Token { data: TokenData::Semicolon, noncanonical_start: i, noncanonical_end: i+1, origin }),
+            ','  => ret.push(Token { data: TokenData::Colon, noncanonical_start: i, noncanonical_end: i+1, origin }),
             '0'..='9' => {
                 let extent = test_number_extent(&inputc);
                 if extent != 0{
-                    ret.push(Token::NumberLiteral(&inputc[..extent]));
+                    ret.push(
+                        Token {
+                            data: TokenData::NumberLiteral(&inputc[..extent]),
+                            noncanonical_start: i,
+                            noncanonical_end: i + extent, 
+                            origin
+                        }
+                    );
                     inputc = &inputc[extent..];
                     continue;
                 }
             },
             '\'' | '\"' => {
                 let (literal, new_inputc) = consume_string_literal(&inputc);
-                ret.push(Token::StringLiteral(literal));
                 inputc = new_inputc;
+                let end = getIndex!();
+
+                ret.push(Token { data: TokenData::StringLiteral(literal), noncanonical_start: i, noncanonical_end: end, origin });
                 continue;
             },
-
+            '_' | 'a'..='z' | 'A'..='Z' => {
+                let (cluster, new_inputc) = consume_char_cluster(&inputc);
+                inputc = new_inputc;
+                ret.push(
+                    Token { data: TokenData::TextCluster(cluster), noncanonical_start: i, noncanonical_end: i + cluster.len(), origin}
+                );
+                continue;
+            },
             // Taken from is_ascii_punctuation
             '!'..='/' | ':'..='@' | '['..='`' | '{'..='~'  => {
                 if let Some((size, is_open, bracket)) = Bracket::try_from(&inputc){
                     ret.push(
-                        if is_open { Token::OpenBracket(bracket) } else  { Token::CloseBracket(bracket) }
+                        Token {
+                            data: if is_open { TokenData::OpenBracket(bracket) } else  { TokenData::CloseBracket(bracket) },
+                            noncanonical_start: i,
+                            noncanonical_end: i + size,
+                            origin
+                        }
+                        
                     );
                     inputc = &inputc[size..];
                     continue;
                 }
                 if let Some((size, operator)) = Operator::try_from_string(inputc){
-                    ret.push(Token::Operator(operator));
+                    ret.push(Token { data: TokenData::Operator(operator), noncanonical_start: i, noncanonical_end: i + size, origin });
                     inputc = &inputc[size..];
                     continue;
                 }
-            }
-            '_' | _ if chr.is_alphanumeric() => {
-                let (cluster, new_inputc) = consume_char_cluster(&inputc);
-                inputc = new_inputc;
-                ret.push(
-                    Token::TextCluster(cluster)
-                );
-                continue;
             },
-            ';'  => ret.push(Token::Semicolon),
-            ','  => ret.push(Token::Colon),
-            _ => {dbg!(chr); ret.push(Token::UNKNOWN(chr)) }   
+            _ => {ret.push(Token { data: TokenData::UNKNOWN(chr), noncanonical_start: i, noncanonical_end: i+1, origin }) }   
         }
         
         inputc = &inputc[1..];
-        
-        
-
-
     }
     
     
