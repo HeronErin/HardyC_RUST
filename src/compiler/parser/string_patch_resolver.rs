@@ -3,6 +3,8 @@
 // outputted code to be mapped back to the original.
 // Including over multiple source files
 
+use std::mem;
+
 
 #[derive(Debug)]
 struct Patch{
@@ -14,7 +16,8 @@ struct Patch{
 #[derive(Debug)]
 pub struct PatchString{
    internal_string : String,
-   patches : Vec<Patch>
+   patches : Vec<Patch>,
+   is_scalped : bool
 }
 
 pub enum RebuildAction{
@@ -32,6 +35,7 @@ impl PatchString{
         PatchString{
             internal_string: input,
             patches: Vec::new(),
+            is_scalped: false,
         }
     }
     #[inline]
@@ -40,15 +44,21 @@ impl PatchString{
     }
     #[inline]
     pub fn get_str<'a>(&'a self) -> &'a str{
+        assert!(!self.is_scalped);
         &self.internal_string
     }
-    // Scalps the PatchString and turns it into the proper String
-    pub fn into_string(self) -> String{self.internal_string}
+    // Scalps the PatchString, Gives you the back a string
+    // while leaving the PatchString an empty husk
+    pub fn scalp(&mut self) -> String{
+        self.is_scalped = true;
+        mem::take(&mut self.internal_string)
+    }
     
     // WARNING: O(N + O)
     // Requires copying both the input string, and copying any remainder
     // in the patch string pos.len() to the right
     pub fn insert(&mut self, pos : usize, str : &str){
+        assert!(!self.is_scalped);
         self.internal_string.insert_str(pos, str);
         self.patches.push(Patch{
             start: pos,
@@ -59,6 +69,7 @@ impl PatchString{
     // WARNING: O(N)
     // Requires copying the remainder of the string end-start to the left
     pub fn delete(&mut self, start : usize, end : usize){
+        assert!(!self.is_scalped);
         if start == end{ return };
 
         let real_end = end.max(start);
@@ -235,6 +246,8 @@ impl PatchString{
     }
     #[inline]
     pub fn rebuild_string_windowed<const N : usize>(&mut self, predicate : impl FnMut([char; N]) -> RebuildAction){
+        assert!(!self.is_scalped);
+
         // Steal patches, this way we don't need to copy every patch
         let patches = std::mem::take(&mut self.patches);
         *self = Self::_construct_from(self.internal_string.as_str(), patches, predicate);

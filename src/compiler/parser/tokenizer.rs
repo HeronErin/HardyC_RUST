@@ -135,7 +135,9 @@ fn consume_string_literal<'a>(input : &'a str) -> (&'a str,  &'a str){
 
 pub fn tokenize<'a>(input_str : &'a str, origin : usize) -> Result<Vec<Token<'a>>, CompilerError>{
     let mut inputc = input_str;
-    let mut ret = Vec::new();
+    
+    // Implicit new lines makes things simpler
+    let mut ret = vec![Token{ data: TokenData::NLstyleWs, noncanonical_start: 0, noncanonical_end: 0, origin }];
 
     macro_rules! getIndex {
         () => {
