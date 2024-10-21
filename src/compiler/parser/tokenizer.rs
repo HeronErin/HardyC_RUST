@@ -132,12 +132,11 @@ fn consume_string_literal<'a>(input : &'a str) -> (&'a str,  &'a str){
 }
 
 
-
 pub fn tokenize<'a>(input_str : &'a str, origin : usize) -> Result<Vec<Token<'a>>, CompilerError>{
     let mut inputc = input_str;
     
     // Implicit new lines makes things simpler
-    let mut ret = vec![Token{ data: TokenData::NLstyleWs, noncanonical_start: 0, noncanonical_end: 0, origin }];
+    let mut ret = Vec::new();
 
     macro_rules! getIndex {
         () => {
@@ -226,5 +225,18 @@ pub fn tokenize<'a>(input_str : &'a str, origin : usize) -> Result<Vec<Token<'a>
     
     
     Ok(ret)
+}
+
+#[inline]
+pub fn skip_ws<'a, 'b>(mut toks : &'a [Token<'b>]) -> Option<(&'a Token<'b>,  &'a[Token<'b>])>{
+    loop{
+        match toks.get(0)? {
+            Token { data: TokenData::SepStyleWS | TokenData::NLstyleWs, ..} => toks = &toks[1..],
+            _ => return Some((
+                &toks[0],
+                toks
+            ))
+        }
+    }
 }
 

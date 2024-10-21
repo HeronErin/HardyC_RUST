@@ -138,6 +138,7 @@ impl PatchString{
                 };
                 return Self{
                     internal_string : new_string,
+                    is_scalped: false,
                     patches
                 };
             };

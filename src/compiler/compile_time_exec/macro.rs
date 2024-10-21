@@ -1,13 +1,14 @@
 // Expand out and process compiler directives
 
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, fs, path::PathBuf};
 
 use crate::compiler::{
     error::{CompilerError, ErrorVariety},
     operators::Operator,
     parser::{
         string_patch_resolver::PatchString,
-        tokenizer::{tokenize, Token, TokenData},
+        tokenizer::{skip_ws, tokenize, Token, TokenData},
+        translation::{self, initial_translation_phases},
     },
     state::TranslationUnit,
 };
@@ -23,125 +24,181 @@ pub enum Macro<'a> {
     VariableStyle(Vec<TokenData<'a>>),
 }
 
-struct MacroExpandState<'a> {
-    unit: &'a mut TranslationUnit<'a>,
-    expanded_tokens: Vec<Token<'a>>,
-    pre_token_stash : Vec<Token<'a>>,
-    macro_map: HashMap<&'a str, Macro<'a>>,
-
-    was_handled: bool,
+fn token_gen<'a>(
+    origin_file: &PathBuf,
+    determined_name: &str,
+    name_origin: &[Token<'_>],
+    unit: &'a mut TranslationUnit,
+) -> Result<Vec<Token<'a>>, CompilerError> {
+    let closest = unit
+        .resolve_to_closest(determined_name, origin_file.parent())
+        .ok_or_else(|| {
+            CompilerError::from_tokens(
+                unit,
+                name_origin,
+                ErrorVariety::FileNotFoundError,
+                "Failed to resolve import: \"".to_owned() + determined_name + "\"",
+            )
+        })?;
+    let s = fs::read_to_string(closest.clone()).map_err(|e| CompilerError {
+        error_variety: ErrorVariety::IoError(e),
+        info: "Is error".to_owned(),
+    })?;
+    let ps = initial_translation_phases(&s);
+    unit.files.push((closest, s, ps));
+    let info_ref = unsafe { unit.files.last().unwrap_unchecked() };
+    return tokenize(&info_ref.2.get_str(), unit.files.len() - 1);
 }
 
-use crate::compiler::error::ErrorVariety::*;
-impl<'a> MacroExpandState<'a> {
-    fn init(unit: &'a mut TranslationUnit<'a>) -> Result<Self, CompilerError> {
-        assert!(
-            !unit.is_initialized,
-            "Refusal to initialize expand initialized TranslationUnit"
-        );
-        assert!(
-            unit.files.len() == 1,
-            "TranslationUnit has not been properly seeded"
-        );
-        unit.is_initialized = true;
+// Assume we are **immediately** after include, simply skip ws find <> and "" and extract the true contents
+// option is set to None if include either requires expansion or is invalid
+fn resolve_include_name<'a>(
+    unit: &TranslationUnit,
+    mod_file_cont: &'a str,
+    toks: &[Token<'a>],
+) -> Result<Option<&'a str>, CompilerError> {
+    let (first_tok, new_toks) = skip_ws(toks)
+        .ok_or_else(|| CompilerError::from_tokens(unit, toks, ErrorVariety::UnexpectedEof, "Can't find first token of #include".to_owned()))?;
+    Ok(match first_tok {
+        Token { data : TokenData::StringLiteral(str), .. } => Some(&str[1..str.len()-1]),
+        // This is not as simple...
+        Token { data : TokenData::Operator(Operator::LesserThan), noncanonical_start : start, ..} => {
+            let after_start = &mod_file_cont[*start+1..];
+            let end_ind = after_start
+                .char_indices()
+                .filter(|c| c.1 == '>')
+                .map(|c|c.0)
+                .next()
+                .ok_or_else(|| CompilerError::from_tokens(unit, new_toks, ErrorVariety::UnexpectedEof, "Unable to find end of include string".to_owned()))?;
+            Some(&after_start[..end_ind])
+        }
+        _ => None
+    })
+}
 
-        let (path, original_text, translated_pstr, translated_str) =
-            unsafe { unit.files.last().unwrap_unchecked() };
-        let translated_str = translated_str.as_str();
 
-        // Capacity note: token_basis.capacity() != token_basis.len()
-        // Therefore this is a large overestimate, but thats alright
 
-        Ok(Self {
-            unit,
-            expanded_tokens: Vec::new(),
-            macro_map: HashMap::new(),
-            was_handled: false,
-            pre_token_stash: Vec::new(),
-        })
+macro_rules! clone_mut_ref {
+    ($x : expr) => {
+        unsafe{
+            let ptr = $x as *mut _;
+            std::mem::transmute(ptr)
+        }
+        
+        
+    };
+}
+
+pub fn macro_evaluation(unit: &mut TranslationUnit) -> Result<(), CompilerError> {
+    assert!(!unit.is_initialized);
+    unit.is_initialized = true;
+
+    let seed = unit.files.last().expect("Unit was not seeded!");
+    let (mut file, mut og_cont, mut mut_cont) = (&seed.0, &seed.1, &seed.2);
+
+    let og_token_vec = tokenize(&mut_cont.get_str(), 0)?;
+    let mut current_tokens = og_token_vec.as_slice();
+
+    let mut file_stack: Vec<(&PathBuf, &String, &PatchString, &[Token<'_>])> = Vec::new();
+    let mut just_started_file = true;
+
+
+    fn expand(){
+
     }
-    fn handle_include<'b>(&mut self, toks: &'b [Token<'a>]) -> Result<Vec<&'b Token<'a>>, CompilerError> {
-        todo!()
-    }
-    fn  handle_directive<'b>(&mut self, toks: &'b [Token<'a>]) -> Result<(&'b [Token<'a>], Vec<Token<'a>>), CompilerError> {
-            let directive = match toks.get(0){
-                // EOF
-                None => Err(CompilerError{ error_variety: ErrorVariety::UnexpectedEof, info: "Stray '#' found in code during macro expansion followed by an EOF".to_owned() })?,
-                // Good path
-                Some(Token { data : TokenData::TextCluster(directive), noncanonical_start: _, noncanonical_end : _, origin : _}) => directive,
-                // Invalid directive type
-                _ => Err(CompilerError::from_tokens(self.unit, &toks[0..1], InvalidPreprocessorDirective, "Please use text for preprocessor directives (or you left a stray '#' in your code)".to_owned()))?
-            };
-            let eol = toks
+
+    loop {
+        // Handle file transitions
+        if current_tokens.len() == 0 {
+            if let Some((_file, _og_cont, _mut_cont, _tok)) = file_stack.pop() {
+                file = &*_file;
+                og_cont = &*_og_cont;
+                mut_cont = &*_mut_cont;
+                current_tokens = &*_tok;
+            } else {
+                break;
+            }
+        }
+
+        let is_procedure = match (&current_tokens[0], current_tokens.get(1)) {
+            // At start of file
+            (
+                Token { data: TokenData::Operator(Operator::Pound), .. },
+                _,
+            ) if just_started_file => {
+                current_tokens = &current_tokens[1..];
+                true
+            }
+            // In midst of file
+            (
+                Token { data: TokenData::NLstyleWs, .. },
+                Some(Token { data: TokenData::Operator(Operator::Pound), .. }),
+            ) => {
+                current_tokens = &current_tokens[2..];
+                true
+            }
+            // Something else that we don't care about
+            _ => false,
+        };
+        if is_procedure {
+            let eol = current_tokens
                 .into_iter()
                 .enumerate()
-                .filter(|tok| matches!(tok.1.data, TokenData::NLstyleWs))
-                .map(|tok| tok.0)
+                .filter(|x| {
+                    matches!(&x.1, Token { data: TokenData::NLstyleWs, .. } )
+                })
+                .map(|x| x.0)
                 .next()
-                .unwrap_or(toks.len());
-            let line = &toks[1..eol];
-            println!("{}", directive);
-            // todo!();
-            let l = match *directive {
-                "include" => self.handle_include(line)?,
+                .unwrap_or(current_tokens.len());
 
-                _ => Err(CompilerError::from_tokens(self.unit, &toks[0..1], InvalidPreprocessorDirective, "Not a recognized preprocessor directive: \"".to_owned() + directive + "\""))?
+            let mut current_line = &current_tokens[..eol];
+
+            let proc = match current_line.get(0) {
+                Some(Token {
+                    data: TokenData::TextCluster(text),
+                    ..
+                }) => *text,
+                Some(_) => Err(CompilerError::from_tokens(
+                    unit,
+                    &current_line[..1],
+                    ErrorVariety::InvalidPreprocessorDirective,
+                    "Unexpected preprocessor procedure type".to_owned(),
+                ))?,
+                None => Err(CompilerError {
+                    error_variety: ErrorVariety::UnexpectedEof,
+                    info: "Stray '#' at end of file".to_owned(),
+                })?,
             };
-
-            Ok((
-                &toks[eol..],
-                todo!()
-            ))
-        }
-
-    fn handle(&mut self) -> Result<(), CompilerError> {
-        debug_assert!(!self.was_handled);
-        self.was_handled = true;
-        
-        let (mut path, mut og, mut ps, mut translated) = (
-            self.unit.files[0].0.clone(),
-            self.unit.files[0].1.as_str(),
-            &self.unit.files[0].2,
-            self.unit.files[0].3.as_str(),
-        );
-        let mut file_stack = Vec::new();
-        
-        let initial_tokens_vec = tokenize(translated, 0)?;
-        let mut current_tokens = initial_tokens_vec.as_slice();
-       
-        
-
-        
-        loop {
-            if current_tokens.len() == 0 {
-                if let Some((_path, _og, _ps, tok)) = file_stack.pop() {
-                    path = _path;
-                    og = _og;
-                    ps = _ps;
-                    current_tokens = tok;
-                } else {
-                    break;
+            current_line = &current_line[1..];
+            match proc {
+                "include" => {
+                    // TODO: HANDLE EXPAND REQUIRING INCLUDES!
+                    let include_str = resolve_include_name(&*unit, &mut_cont.get_str(), &current_line)?
+                        .expect("Unsupported include type"); 
+                    token_gen(
+                        file,
+                        include_str,
+                        current_line,
+                        clone_mut_ref!(unit)
+                    );
+                    
                 }
+
+                _ => Err(CompilerError::from_tokens(
+                    unit,
+                    &current_line,
+                    ErrorVariety::InvalidPreprocessorDirective,
+                    "Unknown preprocessor procedure: ".to_owned() + proc,
+                ))?,
             }
-            // Test for compiler directive (Works with start of files due to implicit new lines added in tokenizer)
-            if matches!(
-                (&current_tokens[0].data, &current_tokens[1].data),
-                (TokenData::NLstyleWs, TokenData::Operator(Operator::Pound),)
-            ) {
-                current_tokens = &current_tokens[2..];
-                self.handle_directive(&current_tokens)?;
-            } else {
-                current_tokens = &current_tokens[1..];
-            }
+
+            just_started_file = false;
+            continue;
         }
+        // TODO: ACTUAL EXPANSION
 
-        todo!()
+        just_started_file = false;
     }
-}
-
-pub fn macro_evaluation<'a>(mut unit: &'a mut TranslationUnit<'a>) -> Result<(), CompilerError> {
-    let mut x = MacroExpandState::init(unit)?;
-    x.handle()?;
 
     todo!()
 }

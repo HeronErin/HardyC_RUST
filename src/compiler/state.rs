@@ -12,9 +12,8 @@ pub struct TranslationUnit<'a> {
     pub path: Vec<PathBuf>,
 
 
-    // Must be Rc or rust freaks the fuck out
-    //            (path,      og contents, mutated contents(scalped ps), mutated contents (string)    )
-    pub files: Vec<(Rc<PathBuf>, String, PatchString, String)>,
+    
+    pub files: Vec<(PathBuf, String, PatchString)>,
 
     pub is_initialized : bool,
 
@@ -37,6 +36,18 @@ impl<'a> TranslationUnit<'a> {
             tokens: Vec::new(),
         }
     }
+    pub fn resolve_to_closest(&self, name : &str, path_addition : Option<&Path>) -> Option<PathBuf>{
+        if let Some(path_addition) = path_addition{
+            let j = path_addition.join(name);
+            if j.exists() {return Some(j);}
+        }
+        for p in &self.path{
+            let j = p.join(name);
+            if j.exists() {return Some(j);}
+        }
+        return None;
+    }
+
     // JUST INITS THE OBJECT, NOTHING ELSE
     pub fn seed_from_file(seed: &str) -> Result<Self, CompilerError> {
         let p = Path::new(seed);
@@ -57,7 +68,7 @@ impl<'a> TranslationUnit<'a> {
             info: "Unspecified io error when resolving path: \"".to_owned() + seed + "\"",
         })?;
         // All the ways that parent() can return None have been checked above
-        let parent = unsafe { real_path.parent().unwrap_unchecked() };
+        // let parent = unsafe { real_path.parent().unwrap_unchecked() };
 
         let f = std::fs::File::open("a");
         let og_string = read_to_string(real_path.clone()).map_err(|e| CompilerError {
@@ -67,10 +78,9 @@ impl<'a> TranslationUnit<'a> {
                 + "\"",
         })?;
         let mut translated = initial_translation_phases(&og_string);
-        let translated_string = translated.scalp();
         Ok(Self {
-            path: vec![parent.to_path_buf()],
-            files: vec![(real_path.into(), og_string.into(), translated.into(), translated_string.into())],
+            path: vec![],
+            files: vec![(real_path, og_string, translated)],
             is_initialized: false,
             tokens: vec![],
         })
